@@ -10,7 +10,7 @@
 	RPi WEb Server for DHT captured data with Gage and Graph plot  
 '''
 
-from datetime import datetime
+from datetime import datetime,timedelta
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -20,8 +20,6 @@ from flask import Flask, render_template, send_file, make_response, request,json
 app = Flask(__name__)
 
 import sqlite3
-
-
 
 # Retrieve LAST data from database
 def getLastData():
@@ -190,6 +188,38 @@ def plot_data():
           'rangeTime'		: rangeTime
 	}
 	return 	jsonify(tData)
+@app.route('/get_data_by_minute', methods=['POST'])
+def get_data_by_minute():
+    exact_time_str = request.form['exact_time']
+    try:
+        exact_time = datetime.strptime(exact_time_str, '%Y-%m-%dT%H:%M')
+        start_of_minute = exact_time
+        end_of_minute = start_of_minute + timedelta(minutes=1)
+
+        conn = sqlite3.connect('../sensorsData.db', check_same_thread=False)
+        curs = conn.cursor()
+        curs.execute("""
+            SELECT * FROM DHT_data
+            WHERE timestamp >= ? AND timestamp < ?
+        """, (start_of_minute, end_of_minute))
+        rows = curs.fetchall()
+        conn.close()
+
+        if rows:
+            first_row = rows[0]  
+            return jsonify({
+                'time': first_row[0],
+                'temp': first_row[1],
+                'humidity': first_row[2]
+            })
+        else:
+            return jsonify({
+                'time': "none",
+                'temp': "none",
+                'humidity': "none"
+            }),200
+    except ValueError:
+        return jsonify({'error': 'Invalid timestamp format. Please use YYYY-MM-DDTHH:MM.'}), 400
 if __name__ == "__main__":
    app.run(host='0.0.0.0', port=80, debug=False)
 
